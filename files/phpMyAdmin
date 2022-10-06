@@ -1,0 +1,15 @@
+
+# phpMyAdmin配置项
+context /phpMyAdmin {
+    location                $VH_ROOT/phpMyAdmin
+    allowBrowse             1
+    indexFiles              index.php
+
+    rewrite  {
+    }
+
+    addDefaultCharset       off
+
+    phpIniOverride  {
+    }
+}

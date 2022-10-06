@@ -1,0 +1,14 @@
+
+# 面板监听项
+listener HTTP {
+    address                 *:80
+    secure                  0
+}
+
+listener HTTPs {
+    address                 *:443
+    secure                  1
+    keyFile                 $SERVER_ROOT/conf/example.key
+    certFile                $SERVER_ROOT/conf/example.crt
+    certChain               1
+}
