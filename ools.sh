@@ -82,9 +82,9 @@ install_ols(){
     #添加监听器
     wget -qO - $repo_raw/files/listener >> $ols_root/conf/httpd_config.conf
     # 创建密钥文件
-    wget -P $ols_root/conf  $repo_raw/files/example.key && chmod 0600 $ols_root/conf/example.key
+    wget -N -P $ols_root/conf $repo_raw/files/example.key && chmod 0600 $ols_root/conf/example.key
     # 创建证书文件
-    wget -P $ols_root/conf  $repo_raw/files/example.crt && chmod 0600 $ols_root/conf/example.crt
+    wget -N -P $ols_root/conf $repo_raw/files/example.crt && chmod 0600 $ols_root/conf/example.crt
     #重新加载配置
     service lsws force-reload
     #
@@ -116,10 +116,53 @@ install_maria_db(){
     #创建密码
     root_pwd=$(random_str 12)
     #设置密码
-	mysql -uroot -e "flush privileges;"
+    mysql -uroot -e "flush privileges;"
     mysqladmin -u root password $root_pwd
     echo "MySQL账号: root" >> .ols
     echo "MySQL密码: $root_pwd" >> .ols
+}
+# 获取域名DNS解析
+dns_domain_test(){
+    #判断域名是否有解析
+    if (ping -c 2 $1 &>/dev/null); then
+        #获取域名解析IP
+        domain_ip=$(ping "$1" -c 1 | sed '1{s/[^(]*(//;s/).*//;q}')
+    else 
+        echo2 "[$1]:域名解析失败"
+        exit 0
+    fi
+    #判断是否解析成功
+    if [[ $local_ip = $domain_ip ]] ; then
+        echo2 "[$1]域名DNS解析IP: $domain_ip" G
+    else
+        echo2 "[$1]:域名解析目标不正确."
+        exit 0
+    fi
+}
+# 获取域名
+get_domain(){
+    #获取输入
+    echo -e "\033[32m"
+    read -p "域名参数-m 主域名 -d 额外域名 (eg: -m demo.com -d www.demo.com):" domain
+    echo -e "\033[0m"
+    #提取域名列表
+    domain=$(echo $domain | tr -s ' ')
+    local domain_list=($domain)
+    #验证域名DNS
+    for ((i=0; i<=${#domain_list[@]}; i++))
+    do
+        if [[ ${domain_list[$i]} = '-m' ]]; then
+            main_domain=${domain_list[$i+1]}
+            dns_domain_test $main_domain
+        elif [[ ${domain_list[$i]} = '-d' ]]; then
+            dns_domain_test ${domain_list[$i+1]}
+        fi
+    done
+    # 
+    if [[ -z $main_domain ]]; then
+        echo2 '主域名不能为空!'
+        exit 0
+    fi
 }
 # 安装WordPress
 install_wp(){
@@ -128,34 +171,10 @@ install_wp(){
         echo2 "OpenLiteSpeed 不存在"
         exit 0
     fi
-    #接收用户输入
-    read -p "请输入域名(eg:www.demo.com):" domain
-    if [ -z $domain ]; then
-        echo2 '域名不能为空'
-        exit 0
-    fi
-    #检测网站是否存在
-    if [ -d $vhs_root/$domain ]; then
-        echo2 '网站已存在!'
-        exit 0
-    fi
-    #判断域名是否有解析
-    if (ping -c 2 $domain &>/dev/null); then
-        #获取域名解析IP
-        domain_ip=$(ping "${domain}" -c 1 | sed '1{s/[^(]*(//;s/).*//;q}')
-    else 
-        echo2 '域名解析失败'
-        exit 0
-    fi
-    #判断是否解析成功
-    if [[ $local_ip = $domain_ip ]] ; then
-        echo2 "域名DNS解析IP: $domain_ip" G
-    else
-        echo2 "域名解析失败."
-        exit 0
-    fi
+    #接收域名
+    get_domain
     #创建网站根目录和SSL目录
-    mkdir -p $vhs_root/$domain/backup && cd $vhs_root/$domain
+    mkdir -p $vhs_root/$main_domain/backup && cd $vhs_root/$main_domain
     #下载WP程序
     wget https://wordpress.org/latest.tar.gz
     #解压WP程序 并删除压缩文件
@@ -167,18 +186,20 @@ install_wp(){
     #文件权限
     find wordpress/ -type f -exec chmod 640 {} \;
     #创建网站配置目录
-    mkdir $ols_root/conf/vhosts/$domain
+    mkdir $ols_root/conf/vhosts/$main_domain
     #下载虚拟主机配置文件
-    wget -N -P $ols_root/conf/vhosts/$domain $repo_raw/files/vhconf.conf
+    wget -N -P $ols_root/conf/vhosts/$main_domain $repo_raw/files/vhconf.conf
     #在主配置文件中指定虚拟主机配置信息
-    wget -qO - $repo_raw/files/domain | sed "s/\$domain/$domain/" >> $ols_root/conf/httpd_config.conf
+    wget -qO - $repo_raw/files/domain | sed "s/\$domain/$main_domain/" >> $ols_root/conf/httpd_config.conf
+    #
+    local domain_list=$(echo $domain | sed -r 's/-d|-m//g' | sed -r 's/^\s+|\s+$//g' | sed -r 's/\s+/,/g')
     #添加网站端口
-    sed -i "/listener HTTPs {/a\map        $domain $domain" $ols_root/conf/httpd_config.conf
-    sed -i "/listener HTTP {/a\map         $domain $domain" $ols_root/conf/httpd_config.conf
+    sed -i "/listener HTTPs {/a\map        $main_domain $domain_list" $ols_root/conf/httpd_config.conf
+    sed -i "/listener HTTP {/a\map         $main_domain $domain_list" $ols_root/conf/httpd_config.conf
     #切换工作目录
     cd $ols_root/conf/vhosts
     #设置权限
-    chown -R lsadm:nogroup $domain
+    chown -R lsadm:nogroup $main_domain
     #重启服务
     service lsws restart
     #切换工作目录
@@ -195,7 +216,7 @@ install_wp(){
     mysql -uroot -p$mysql_pass -Nse "grant all privileges on $db_name.* to '$db_user'@'%' identified by '$db_user'"
     mysql -uroot -p$mysql_pass -Nse "flush privileges"
     #定义变量
-    admin_file=$vhs_root/$domain/backup/admin
+    admin_file=$vhs_root/$main_domain/backup/admin
     #删除存在的文件
     if [ -e $admin_file ]; then
         rm $admin_file
@@ -203,34 +224,41 @@ install_wp(){
     echo "DB Name: $db_name" >> $admin_file
     echo "DB User: $db_user" >> $admin_file
     echo "DB Pass: $db_user" >> $admin_file
-    echo2 "数据库信息: [cat $admin_file]"
+    echo2 "数据库信息: [cat $admin_file]" Y
     echo -e "\033[32m"
     cat $admin_file
     echo -e "\033[0m"
 }
 # 申请SSl证书
 cert_ssl(){
-    #获取输入
-    read -p "请输入域名(eg:www.demo.com):" domain
-    if [ ! -d $vhs_root/$domain ]; then
+    #获取域名
+    get_domain "域名输入帮助[保证所有域名解析成功]: -m 主域名,添加站点时填写的域名. -d 其它额外域名"
+    #判断站点是否存在
+    if [[ ! -d $vhs_root/$main_domain ]]; then
         echo2 '站点不存在!'
         exit 0
     fi
     #下载安装证书签发程序
     if [ ! -f "/root/.acme.sh/acme.sh" ] ; then 
-        curl https://get.acme.sh | sh -s email=my@example.com
+        curl https://get.acme.sh | sh -s email=admin@$main_domain
     fi
+    #重新设置CA账户
+    ~/.acme.sh/acme.sh --register-account -m admin@$main_domain
+    #更改证书签发机构
+    ~/.acme.sh/acme.sh --set-default-ca --server letsencrypt
     #设置变量
-    siteSSLSave=$ols_root/conf/vhosts/$domain && mkdir -p $siteSSLSave
+    siteSSLSave=$ols_root/conf/vhosts/$main_domain && mkdir -p $siteSSLSave
+    #获取所有域名
+    domain=$(echo $domain | sed -r 's/-m\s+/-d /g' | tr -s ' ')
     #开使申请证书
-    ~/.acme.sh/acme.sh --issue -d $domain --webroot $vhs_root/$domain/wordpress
+    ~/.acme.sh/acme.sh --issue $domain --webroot $vhs_root/$main_domain/wordpress
     #证书签发是否成功
-    if [ ! -f "/root/.acme.sh/$domain/fullchain.cer" ] ; then 
+    if [ ! -f "/root/.acme.sh/$main_domain/fullchain.cer" ] ; then 
         echo2 "证书签发失败."
         exit 0
     fi
     #copy/安装 证书
-    ~/.acme.sh/acme.sh --install-cert -d $domain --cert-file $siteSSLSave/cert.pem --key-file $siteSSLSave/key.pem --fullchain-file $siteSSLSave/fullchain.pem --reloadcmd "service lsws force-reload"
+    ~/.acme.sh/acme.sh --install-cert $domain --cert-file $siteSSLSave/cert.pem --key-file $siteSSLSave/key.pem --fullchain-file $siteSSLSave/fullchain.pem --reloadcmd "service lsws force-reload"
     # 
     echo2 "证书文件: $siteSSLSave/cert.pem" G
     echo2 "私钥文件: $siteSSLSave/key.pem"	G
