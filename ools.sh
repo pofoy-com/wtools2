@@ -41,6 +41,17 @@ isDBExist(){
 mysql_root_get(){
     echo $(grep 'MySQL密码' ~/.ols | cut -d : -f 2 | sed 's/ //')
 }
+# 获取系统信息
+os_info(){
+    #获取系统名称
+    os_name=$(cat /etc/os-release | grep ^ID= | cut -d = -f 2)
+    #获取系统版本
+    if [ -f /etc/lsb-release ]; then
+        os_ver=$(cat /etc/lsb-release | grep DISTRIB_CODENAME | cut -d = -f 2)
+    else
+        os_ver=$(cat /etc/os-release | grep VERSION= | sed -r 's/VERSION=".*\(([a-z]+)\)"/\1/')
+    fi
+}
 # 创建防火墙规则
 creat_firewall_rule(){
     #是否存在
@@ -100,10 +111,7 @@ install_maria_db(){
         echo2 "MariaDB 已存在"
         exit 0
     fi
-    #获取系统名称
-    os_name=$(cat /etc/os-release | grep ^ID= | cut -d = -f 2)
-    #获取系统版本
-    os_ver=$(cat /etc/os-release | grep VERSION_CODENAME | cut -d = -f 2)
+    os_info
     #添加密钥
     curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc'
     #选择系统
@@ -329,7 +337,7 @@ menu(){
 
     read -p "请选择:" num
     if [ $num -eq 1 ] ; then
-        apt update
+        apt update -y
         #安装所需工具
         apt-get install socat cron curl iputils-ping apt-transport-https -y
         creat_firewall_rule
