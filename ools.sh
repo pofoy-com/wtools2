@@ -19,7 +19,7 @@ echo2(){
     else
         color="38;5;203"    #红色
     fi
-	echo -e "\033[${color}m${1}\033[39m"
+    echo -e "\033[${color}m${1}\033[39m"
 }
 # 创建随机字符 最长32位
 random_str(){
@@ -76,14 +76,14 @@ install_ols(){
     apt install openlitespeed -y
     #安装WordPress 的 PHP 扩展
     if [ -e $ols_root/lsphp74/bin/lsphp ] ; then
-        #wordpress 必须组件 
+        #wordpress 必须组件 lsphp74-redis lsphp74-memcached
         apt install lsphp74-imagick lsphp74-curl lsphp74-intl -y
     fi
     #添加监听器
     wget -qO - $repo_raw/files/listener >> $ols_root/conf/httpd_config.conf
-    # 创建密钥文件
+    #创建密钥文件
     wget -N -P $ols_root/conf $repo_raw/files/example.key && chmod 0600 $ols_root/conf/example.key
-    # 创建证书文件
+    #创建证书文件
     wget -N -P $ols_root/conf $repo_raw/files/example.crt && chmod 0600 $ols_root/conf/example.crt
     #重新加载配置
     service lsws force-reload
@@ -173,7 +173,7 @@ install_wp(){
     fi
     #接收域名
     get_domain
-    #创建网站根目录和SSL目录
+    #创建网站根目录
     mkdir -p $vhs_root/$main_domain/backup && cd $vhs_root/$main_domain
     #下载WP程序
     wget https://wordpress.org/latest.tar.gz
@@ -331,7 +331,7 @@ menu(){
     if [ $num -eq 1 ] ; then
         apt update
         #安装所需工具
-        apt-get install socat cron iputils-ping apt-transport-https -y
+        apt-get install socat cron curl iputils-ping apt-transport-https -y
         creat_firewall_rule
         install_ols
         install_maria_db
