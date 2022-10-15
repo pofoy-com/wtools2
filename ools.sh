@@ -113,7 +113,7 @@ install_maria_db(){
     fi
     os_info
     #添加密钥
-    curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc'
+    curl -o /etc/apt/trusted.gpg.d/mariadb_release_signing_key.asc 'https://mariadb.org/mariadb_release_signing_key.asc' --insecure
     #选择系统
     sh -c "echo 'deb https://mirrors.gigenet.com/mariadb/repo/10.5/$os_name $os_ver main' >>/etc/apt/sources.list"
     #开始安装
