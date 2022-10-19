@@ -1,3 +1,12 @@
+# 默认监听器
+listener Default {
+    address                 *:8088
+    secure                  1
+    keyFile                 $SERVER_ROOT/conf/example.key
+    certFile                $SERVER_ROOT/conf/example.crt
+    certChain               1
+    map                     Example *
+}
 
 # 面板监听项
 listener HTTP {

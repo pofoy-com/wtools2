@@ -21,6 +21,22 @@ echo2(){
     fi
     echo -e "\033[${color}m${1}\033[39m"
 }
+#指定开始字符串所在行 到 结束字符串所有行之间的所有数据 
+del_start_to_end_line_str(){
+    local start="$1"
+    local end="$2"
+    local file="$3"
+    local num=$(grep -n "$start" $file | cut -d ":" -f 1)
+    while true
+    do
+        if [[ "$(sed -n ${num}p $file)" = "$end" ]]; then
+            sed -i ${num}d $file
+            break
+        else
+            sed -i ${num}d $file
+        fi
+    done
+}
 # 创建随机字符 最长32位
 random_str(){
     if [ -z $1 ]; then
@@ -59,7 +75,7 @@ creat_firewall_rule(){
         #下载防火墙规则
         wget -qO - $repo_raw/files/firewall > /etc/iptables.rules
         #下载重启自动加载文件
-        wget -P /etc $repo_raw/files/rc.local
+        wget -N -P /etc $repo_raw/files/rc.local
         #添加执行权限
         chmod +x /etc/rc.local
         #启动服务
@@ -90,7 +106,13 @@ install_ols(){
         #wordpress 必须组件 lsphp74-redis lsphp74-memcached
         apt install lsphp74-imagick lsphp74-curl lsphp74-intl -y
     fi
-    #添加监听器
+    #删除默认虚拟机文件
+    rm -rf $ols_root/Example/html/* && rm -rf $ols_root/Example/html/.htaccess
+    #修改文件为可读
+    chmod o+r $ols_root/admin/conf/htpasswd
+    #删除配置 必须用引号
+    del_start_to_end_line_str "listener Default{" "}" "$ols_root/conf/httpd_config.conf"
+    #添加监听器 修改配置
     wget -qO - $repo_raw/files/listener >> $ols_root/conf/httpd_config.conf
     #创建密钥文件
     wget -N -P $ols_root/conf $repo_raw/files/example.key && chmod 0600 $ols_root/conf/example.key
@@ -188,7 +210,7 @@ install_wp(){
     #解压WP程序 并删除压缩文件
     tar -xf latest.tar.gz && rm latest.tar.gz
     #修改文件目录所有者
-    chown -R nobody:nogroup wordpress/
+    cd $vhs_root && chown -R nobody:nogroup $main_domain && cd $main_domain
     #目录权限
     find wordpress/ -type d -exec chmod 750 {} \;
     #文件权限
@@ -309,8 +331,24 @@ install_php_my_admin(){
     service lsws restart
     #
     cd ~
-    echo "phpMyAdmin地址: http://$local_ip:8088/phpMyAdmin" >> .ols
+    echo "phpMyAdmin地址: https://$local_ip:8088/phpMyAdmin" >> .ols
     # echo2 "访问地址: http://$local_ip:8088/phpMyAdmin" G
+}
+# 安装文件管理器
+install_file_manager(){
+    cd $ols_root/Example/html
+    if [ -f 'login.php' ]; then
+        echo2 '检测到文件已存在.'
+        exit 0
+    fi
+    local filemanager_download_url=$(curl -s https://api.github.com/repos/mina998/wtools/releases/latest | grep browser_download_url | cut -f4 -d "\"")
+    wget -N $filemanager_download_url
+    unzip -d ./ filemanager.zip 
+    chown -R nobody:nogroup ./
+    rm filemanager.zip
+    systemctl reload lsws
+    echo "文件管理地址: https://$local_ip:8088/login.php" >> ~/.ols
+    view_ols_info
 }
 # 重置面板用户名和密码
 reset_ols_user_password(){
@@ -329,17 +367,18 @@ view_ols_info(){
 menu(){
     echo2 "(1)安装OpenLiteSpeed 和 MariaDB" G
     echo2 "(2)安装phpMyAdmin" G
-    echo2 "(3)添加WP站点" G
-    echo2 "(4)申请SSL证书 [请先添加站点]" G
-    echo2 "(5)重置面板用户名和密码" G
-    echo2 "(6)查看OLS信息" G
-    echo2 "(7)安装LSMCD缓存模块"
+    echo2 "(3)安装文件管理器" G
+    echo2 "(4)添加WP站点" G
+    echo2 "(5)申请SSL证书 [请先添加站点]" G
+    echo2 "(6)重置面板用户名和密码" G
+    echo2 "(7)查看OLS信息" G
+    echo2 "(8)安装LSMCD缓存模块"
 
     read -p "请选择:" num
     if [ $num -eq 1 ] ; then
         apt update -y
         #安装所需工具
-        apt-get install socat cron curl iputils-ping apt-transport-https -y
+        apt-get install socat cron curl unzip iputils-ping apt-transport-https -y
         creat_firewall_rule
         install_ols
         install_maria_db
@@ -348,12 +387,14 @@ menu(){
         install_php_my_admin
         view_ols_info
     elif [ $num -eq 3 ] ; then
-        install_wp
+        install_file_manager
     elif [ $num -eq 4 ] ; then
-        cert_ssl
+        install_wp
     elif [ $num -eq 5 ] ; then
-        reset_ols_user_password
+        cert_ssl
     elif [ $num -eq 6 ] ; then
+        reset_ols_user_password
+    elif [ $num -eq 7 ] ; then
         view_ols_info
     else
         echo2 "输入无效"
