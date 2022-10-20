@@ -5,7 +5,7 @@ ols_root=/usr/local/lsws
 # 虚拟机保存目录
 vhs_root=/www
 #
-repo_raw=https://raw.githubusercontent.com/mina998/wtools/olstool
+repo_raw=https://raw.githubusercontent.com/pofoy-com/wtools2/olstool
 # 从网络获取本机IP(防止有些机器无法获取公网IP)
 local_ip=$(wget -U Mozilla -qO - http://ip.42.pl/raw)
 # 输出颜色
